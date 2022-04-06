@@ -162,8 +162,10 @@ private:
     std::string d_signal_type;
     std::string d_signal_pretty_name;
     std::string d_dump_filename;
+    std::string d_SNRdump_filename;
 
     std::ofstream d_dump_file;
+    std::ofstream d_SNRdump_file;
 
     // uint64_t d_sample_counter;
     uint64_t d_acq_sample_stamp;
@@ -199,6 +201,7 @@ private:
     bool d_cloop;
     bool d_secondary;
     bool d_dump;
+    bool d_SNRdump;
     bool d_dump_mat;
     bool d_acc_carrier_phase_initialized;
     bool d_enable_extended_integration;
