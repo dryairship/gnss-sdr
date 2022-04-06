@@ -121,6 +121,7 @@ dll_pll_veml_tracking::dll_pll_veml_tracking(const Dll_Pll_Conf &conf_)
       d_veml(false),
       d_cloop(true),
       d_dump(d_trk_parameters.dump),
+      d_SNRdump(d_trk_parameters.SNRdump),
       d_dump_mat(d_trk_parameters.dump_mat && d_dump),
       d_acc_carrier_phase_initialized(false),
       d_Flag_PLL_180_deg_phase_locked(false)
@@ -593,6 +594,40 @@ dll_pll_veml_tracking::dll_pll_veml_tracking(const Dll_Pll_Conf &conf_)
                     d_dump = false;
                 }
         }
+    if (d_SNRdump)
+        {
+            d_SNRdump_filename = d_trk_parameters.SNRdump_filename;
+            std::string SNRdump_path;
+            // Get path
+            if (d_SNRdump_filename.find_last_of('/') != std::string::npos)
+                {
+                    std::string SNRdump_filename_ = d_SNRdump_filename.substr(d_SNRdump_filename.find_last_of('/') + 1);
+                    SNRdump_path = d_SNRdump_filename.substr(0, d_SNRdump_filename.find_last_of('/'));
+                    d_SNRdump_filename = SNRdump_filename_;
+                }
+            else
+                {
+                    SNRdump_path = std::string(".");
+                }
+            if (d_SNRdump_filename.empty())
+                {
+                    d_SNRdump_filename = "snr_prn_";
+                }
+            // remove extension if any
+            if (d_SNRdump_filename.substr(1).find_last_of('.') != std::string::npos)
+                {
+                    d_SNRdump_filename = d_SNRdump_filename.substr(0, d_SNRdump_filename.find_last_of('.'));
+                }
+
+            d_SNRdump_filename = SNRdump_path + fs::path::preferred_separator + d_SNRdump_filename;
+            std::cout << "SNR dumping is ON" << "\n";
+            // create directory
+            if (!gnss_sdr_create_directory(SNRdump_path))
+                {
+                    std::cerr << "GNSS-SDR cannot create SNR dump files for the tracking block. Wrong permissions?\n";
+                    d_SNRdump = false;
+                }
+        }
     d_last_timetag_samplecounter = 0;
     d_timetag_waiting = false;
     set_tag_propagation_policy(TPP_DONT);  // no tag propagation, the time tag will be adjusted and regenerated in work()
@@ -855,6 +890,29 @@ void dll_pll_veml_tracking::start_tracking()
     d_carrier_loop_filter.initialize(static_cast<float>(d_acq_carrier_doppler_hz));  // initialize the carrier filter
     d_code_loop_filter.initialize();                                                 // initialize the code filter
 
+    if (d_SNRdump)
+        {
+            std::string SNRdump_filename_ = d_SNRdump_filename;
+            SNRdump_filename_.append(std::to_string(d_acquisition_gnss_synchro->PRN));
+            SNRdump_filename_.append(".csv");
+            if (!d_SNRdump_file.is_open())
+                {
+                    try
+                        {
+                            d_SNRdump_file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+                            d_SNRdump_file.open(SNRdump_filename_.c_str(), std::ios::out | std::ios::binary);
+
+                            std::cout << "SNR dump file opened" << SNRdump_filename_ << "\n";
+                            LOG(INFO) << "Tracking SNR dump enabled on channel " << d_channel << " Log file: " << SNRdump_filename_.c_str();
+                        }
+                    catch (const std::ifstream::failure &e)
+                        {
+                            std::cout << "SNR dump file opening failed: " << e.what() << "\n";
+                            LOG(WARNING) << "channel " << d_channel << " Exception opening trk SNR dump file " << e.what();
+                        }
+                }
+        }
+
     // DEBUG OUTPUT
     std::cout << "Tracking of " << d_systemName << " " << d_signal_pretty_name << " signal started on channel " << d_channel << " for satellite " << Gnss_Satellite(d_systemName, d_acquisition_gnss_synchro->PRN) << '\n';
     DLOG(INFO) << "Starting tracking of satellite " << Gnss_Satellite(d_systemName, d_acquisition_gnss_synchro->PRN) << " on channel " << d_channel;
@@ -882,6 +940,19 @@ dll_pll_veml_tracking::~dll_pll_veml_tracking()
                     LOG(WARNING) << "Exception in Tracking block destructor: " << ex.what();
                 }
         }
+    if (d_SNRdump_file.is_open())
+        {
+            try
+                {
+                std::cout << "SNR dump file closed" << "\n";
+                    d_SNRdump_file.close();
+                }
+            catch (const std::exception &ex)
+                {
+                    LOG(WARNING) << "Exception in Tracking block destructor: " << ex.what();
+                }
+        }
+    
     if (d_dump_mat)
         {
             try
@@ -973,6 +1044,10 @@ bool dll_pll_veml_tracking::cn0_and_tracking_lock_status(double coh_integration_
     d_CN0_SNV_dB_Hz = d_cn0_smoother.smooth(d_CN0_SNV_dB_Hz_raw);
     // Carrier lock indicator
     d_carrier_lock_test = d_carrier_lock_test_smoother.smooth(carrier_lock_detector(d_Prompt_buffer.data(), 1));
+
+    if(d_SNRdump) {
+        d_SNRdump_file  << this->nitems_read(0) << "," << d_CN0_SNV_dB_Hz << "\n";
+    }
     // Loss of lock detection
     if (!d_pull_in_transitory)
         {

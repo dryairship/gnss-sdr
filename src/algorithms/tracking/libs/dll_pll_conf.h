@@ -38,6 +38,7 @@ public:
     /* DLL/PLL tracking configuration */
     std::string item_type{"gr_complex"};
     std::string dump_filename{"./dll_pll_dump.dat"};
+    std::string SNRdump_filename{"./dll_pll_snr_dump.dat"};
     double fs_in{2000000.0};
     double carrier_lock_th{0.0};
     float pll_pull_in_bw_hz{50.0};
@@ -79,6 +80,7 @@ public:
     bool carrier_aiding{true};
     bool high_dyn{false};
     bool dump{false};
+    bool SNRdump{false};
     bool dump_mat{true};
 };
 
